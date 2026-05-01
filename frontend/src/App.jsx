@@ -11,10 +11,6 @@ import RemoveObject from './pages/RemoveObject'
 import ReviewResume from './pages/ReviewResume'
 import Community from './pages/Community'
 import { Toaster } from "react-hot-toast"
-import { useEffect } from 'react'
-import { useAuth } from '@clerk/clerk-react'
-
-
 
 const App = () => {
 

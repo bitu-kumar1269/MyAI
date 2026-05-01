@@ -1,15 +1,30 @@
-import OpenAI from "openai";
+import { GoogleGenAI } from "@google/genai";
 import sql from "../configs/db.js";
 import { clerkClient } from "@clerk/express";
 import axios from "axios";
-import { v2 as cloudinary } from "cloudinary";
 import fs from "fs";
-const pdf = (await import("pdf-parse")).default;
 
-const AI = new OpenAI({
+const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
-  baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/"
 });
+
+let cloudinaryClientPromise;
+
+const getCloudinary = async () => {
+  if (!cloudinaryClientPromise) {
+    cloudinaryClientPromise = import("cloudinary").then(({ v2 }) => {
+      v2.config({
+        cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+        api_key: process.env.CLOUDINARY_API_KEY,
+        api_secret: process.env.CLOUDINARY_API_SECRET,
+      });
+
+      return v2;
+    });
+  }
+
+  return cloudinaryClientPromise;
+};
 
 export const generateArticle = async (req, res) => {
   try {
@@ -20,24 +35,21 @@ export const generateArticle = async (req, res) => {
 
     if (plan !== "premium" && free_usage >= 10) {
       return res.json({
-        succes: false,
+        success: false,
         message: "Limit reached. Upgrade to continue.",
       });
     }
 
-    const response = await AI.chat.completions.create({
-      model: "gemini-2.0-flash",
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      temperature: 0.7,
-      max_tokens: length,
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: {
+        temperature: 0.7,
+        maxOutputTokens: length,
+      }
     });
 
-    const content = response.choices[0].message.content;
+    const content = response.text;
 
     await sql` INSERT INTO creations (user_id, prompt, content, type) VALUES (${userId}, ${prompt}, ${content}, 'article') `;
 
@@ -65,19 +77,21 @@ export const generateBlogTitle = async (req, res) => {
 
     if (plan !== "premium" && free_usage >= 10) {
       return res.json({
-        succes: false,
+        success: false,
         message: "Limit reached. Upgrade to continue.",
       });
     }
 
-    const response = await AI.chat.completions.create({
-      model: "gemini-2.0-flash",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.7,
-      max_tokens: 100,
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: {
+        temperature: 0.7,
+        maxOutputTokens: 100,
+      }
     });
 
-    const content = response.choices[0].message.content;
+    const content = response.text;
 
     await sql` INSERT INTO creations (user_id, prompt, content, type) VALUES (${userId}, ${prompt}, ${content}, 'blog-title') `;
 
@@ -98,13 +112,14 @@ export const generateBlogTitle = async (req, res) => {
 
 export const generateImage = async (req, res) => {
   try {
+    const cloudinary = await getCloudinary();
     const { userId } = req.auth();
     const { prompt, publish } = req.body;
     const plan = req.plan;
 
     if (plan !== "premium") {
       return res.json({
-        succes: false,
+        success: false,
         message: "This feature is only available for premium subscriptions",
       });
     }
@@ -139,13 +154,14 @@ export const generateImage = async (req, res) => {
 
 export const removeImageBackground = async (req, res) => {
   try {
+    const cloudinary = await getCloudinary();
     const { userId } = req.auth();
     const image = req.file;
     const plan = req.plan;
 
     if (plan !== "premium") {
       return res.json({
-        succes: false,
+        success: false,
         message: "This feature is only available for premium subscriptions",
       });
     }
@@ -170,6 +186,7 @@ export const removeImageBackground = async (req, res) => {
 
 export const removeImageObject = async (req, res) => {
   try {
+    const cloudinary = await getCloudinary();
     const { userId } = req.auth();
     const { object } = req.body;
     const image = req.file;
@@ -177,7 +194,7 @@ export const removeImageObject = async (req, res) => {
 
     if (plan !== "premium") {
       return res.json({
-        succes: false,
+        success: false,
         message: "This feature is only available for premium subscriptions",
       });
     }
@@ -200,6 +217,7 @@ export const removeImageObject = async (req, res) => {
 
 export const resumeReview = async (req, res) => {
   try {
+    const pdf = (await import("pdf-parse")).default;
     const { userId } = req.auth();
     const resume = req.file;
     const plan = req.plan;
@@ -250,14 +268,16 @@ Provide:
 `;
 
     // Call AI
-    const response = await AI.chat.completions.create({
-      model: "gemini-2.0-flash",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.7,
-      max_tokens: 1000,
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: {
+        temperature: 0.7,
+        maxOutputTokens: 1000,
+      }
     });
 
-    const content = response.choices[0].message.content;
+    const content = response.text;
 
     // Save result in database
     await sql`

@@ -17,7 +17,7 @@ const Dashboard = () => {
   }, [])
   return (
     <div className='h-full overflow-y-scroll p-6'>
-      <div className='flex justify-start gap-4 flex-warp'>
+      <div className='flex justify-start gap-4 flex-wrap'>
         {/* Total Creations Card */}
 
         <div className='flex justify-between items-center w-72 p-4 px-6 bg-white rounded-xl border border-gray-200'>
@@ -40,7 +40,7 @@ const Dashboard = () => {
                 plan="premium"
                 fallback={<span className="text-gray-500">Free</span>}
               >
-                <span className="text-gradient-to-r from-[#FF61C5] to-[#9E53EE]">
+                <span className="bg-gradient-to-r from-[#FF61C5] to-[#9E53EE] bg-clip-text text-transparent">
                   Premium
                 </span>
               </Protect>
