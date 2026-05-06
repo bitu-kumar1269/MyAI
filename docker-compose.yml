@@ -2,19 +2,35 @@ version: "3.8"
 
 services:
   backend:
+    image: ${DOCKER_USERNAME:-bitukumar}/notes-backend:latest
     build: ./backend
     container_name: notes-backend
     ports:
       - "5001:5001"
-    env_file:
-      - ./backend/.env
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY}
+      - CLERK_SECRET_KEY=${CLERK_SECRET_KEY}
+      - CLIPDROP_API_KEY=${CLIPDROP_API_KEY}
+      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
+      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
+      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    restart: always
 
   frontend:
-    build: ./frontend
+    image: ${DOCKER_USERNAME:-bitukumar}/notes-frontend:latest
+    build:
+      context: ./frontend
+      args:
+        - VITE_BASE_URL=${VITE_BASE_URL}
+        - VITE_CLERK_PUBLISHABLE_KEY=${VITE_CLERK_PUBLISHABLE_KEY}
     container_name: notes-frontend
     ports:
-      - "5173:5173"
-    env_file:
-      - ./frontend/.env
+      - "3000:3000"
+    environment:
+      - VITE_BASE_URL=${VITE_BASE_URL}
+      - VITE_CLERK_PUBLISHABLE_KEY=${VITE_CLERK_PUBLISHABLE_KEY}
     depends_on:
       - backend
+    restart: always
