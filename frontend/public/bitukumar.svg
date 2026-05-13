@@ -1,0 +1,10 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="aiGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4DF6FF" />
+      <stop offset="100%" stop-color="#8467FC" />
+    </linearGradient>
+  </defs>
+  <path d="M16 2L19.41 12.59L30 16L19.41 19.41L16 30L12.59 19.41L2 16L12.59 12.59Z" fill="url(#aiGradient)"/>
+  <text x="16" y="20" fill="white" font-family="sans-serif" font-size="8" font-weight="bold" text-anchor="middle">BK</text>
+</svg>

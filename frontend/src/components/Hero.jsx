@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { assets } from "../assets/assets";
+import { PlayCircle } from "lucide-react";
 
 const Hero = () => {
   const navigate = useNavigate();
@@ -26,8 +27,22 @@ const Hero = () => {
         >
           Start creating now
         </button>
-        <button className="bg-white px-10 py-3 rounded-lg border border-gray-300 hover:scale-102 active:scale-95 transition cursor-pointer">
-          Watch demo
+        {/* <button
+          onClick={() =>
+            window.open("https://youtu.be/kwbR9FiMx8A", "_blank")
+          }
+          className="bg-primary text-white px-10 py-3 rounded-lg hover:scale-102 active:scale-95 transition cursor-pointer"
+        >
+          Watch Demo
+        </button> */}
+        <button
+          onClick={() => {
+            window.location.href = "/QuickAI_demo.mp4";
+          }}
+          className="bg-primary text-white px-10 py-3 rounded-lg flex items-center gap-2 hover:scale-105 active:scale-95 transition cursor-pointer"
+        >
+          <PlayCircle size={20} />
+          Watch Demo
         </button>
       </div>
 
