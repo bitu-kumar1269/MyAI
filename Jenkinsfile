@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_USERNAME    = 'your-dockerhub-username'
+        DOCKER_USERNAME    = 'bitukumar'
         EC2_HOST           = '52.54.84.196'
         EC2_USER           = 'ubuntu'
         FRONTEND_IMAGE     = "${DOCKER_USERNAME}/notes-frontend:latest"
@@ -50,6 +50,13 @@ pipeline {
                 echo '🚀 Deploying to AWS EC2...'
                 sshagent(['ec2-ssh-key']) {
                     sh """
+                        # 1. Create the application directory on the server if it doesn't exist
+                        ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} 'mkdir -p ~/mern-app'
+                        
+                        # 2. Copy docker-compose.yml from the Jenkins workspace to the server
+                        scp -o StrictHostKeyChecking=no docker-compose.yml ${EC2_USER}@${EC2_HOST}:~/mern-app/docker-compose.yml
+                        
+                        # 3. Pull the latest images and restart the containers
                         ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} '
                             cd ~/mern-app
                             docker-compose pull
