@@ -2,16 +2,16 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_USERNAME    = 'bitukumar'
-        EC2_HOST           = '52.54.84.196'
-        EC2_USER           = 'ubuntu'
-        FRONTEND_IMAGE     = "${DOCKER_USERNAME}/notes-frontend:latest"
-        BACKEND_IMAGE      = "${DOCKER_USERNAME}/notes-backend:latest"
+        DOCKER_USERNAME = 'bitukumar'
+        EC2_HOST        = '52.54.84.196'
+        EC2_USER        = 'ubuntu'
+        FRONTEND_IMAGE  = "bitukumar/notes-frontend:latest"
+        BACKEND_IMAGE   = "bitukumar/notes-backend:latest"
+        PATH            = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:${env.PATH}"
     }
 
     stages {
 
-        // ── Stage 1: Checkout Code ─────────────────────────
         stage('Checkout') {
             steps {
                 echo '📦 Checking out code...'
@@ -19,16 +19,17 @@ pipeline {
             }
         }
 
-        // ── Stage 2: Build Docker Images ───────────────────
         stage('Build Images') {
             steps {
                 echo '🐳 Building Docker images...'
-                sh 'docker build -t ${FRONTEND_IMAGE} ./frontend'
-                sh 'docker build -t ${BACKEND_IMAGE} ./backend'
+                sh '''
+                    export PATH=/usr/local/bin:/opt/homebrew/bin:$PATH
+                    docker build -t bitukumar/notes-frontend:latest ./frontend
+                    docker build -t bitukumar/notes-backend:latest ./backend
+                '''
             }
         }
 
-        // ── Stage 3: Push to Docker Hub ────────────────────
         stage('Push to Docker Hub') {
             steps {
                 echo '⬆️ Pushing images to Docker Hub...'
@@ -37,26 +38,23 @@ pipeline {
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
-                    sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
-                    sh 'docker push ${FRONTEND_IMAGE}'
-                    sh 'docker push ${BACKEND_IMAGE}'
+                    sh '''
+                        export PATH=/usr/local/bin:/opt/homebrew/bin:$PATH
+                        echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                        docker push bitukumar/notes-frontend:latest
+                        docker push bitukumar/notes-backend:latest
+                    '''
                 }
             }
         }
 
-        // ── Stage 4: Deploy to EC2 ─────────────────────────
         stage('Deploy to EC2') {
             steps {
                 echo '🚀 Deploying to AWS EC2...'
                 sshagent(['ec2-ssh-key']) {
                     sh """
-                        # 1. Create the application directory on the server if it doesn't exist
-                        ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} 'mkdir -p ~/mern-app'
-                        
-                        # 2. Copy docker-compose.yml from the Jenkins workspace to the server
+                        export PATH=/usr/local/bin:/opt/homebrew/bin:$PATH
                         scp -o StrictHostKeyChecking=no docker-compose.yml ${EC2_USER}@${EC2_HOST}:~/mern-app/docker-compose.yml
-                        
-                        # 3. Pull the latest images and restart the containers
                         ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} '
                             cd ~/mern-app
                             docker-compose pull
@@ -70,7 +68,6 @@ pipeline {
         }
     }
 
-    // ── Post Actions ───────────────────────────────────────
     post {
         success {
             echo '✅ Pipeline completed successfully!'
