@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         DOCKER_USERNAME = 'bitukumar'
-        EC2_HOST        = '52.54.84.196'
+        EC2_HOST        = '54.227.9.167'
         EC2_USER        = 'ubuntu'
         FRONTEND_IMAGE  = "bitukumar/notes-frontend:latest"
         BACKEND_IMAGE   = "bitukumar/notes-backend:latest"
