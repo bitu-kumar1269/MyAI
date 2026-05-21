@@ -84,7 +84,7 @@ pipeline {
                 sh '''
                     mkdir -p /tmp/mern-app
                     cp docker-compose.yml /tmp/mern-app/docker-compose.yml
-                    cp /home/ubuntu/mern-app/.env /tmp/mern-app/.env
+                    cp /var/jenkins_home/.env /tmp/mern-app/.env
                 '''
             }
         }
