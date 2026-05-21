@@ -60,13 +60,13 @@
 
 
 
-
 pipeline {
     agent any
 
     environment {
         DOCKER_USERNAME = 'bitukumar'
         PATH            = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${env.PATH}"
+        APP_DIR         = "/tmp/mern-app"
     }
 
     stages {
@@ -82,8 +82,9 @@ pipeline {
             steps {
                 echo '📋 Copying docker-compose.yml...'
                 sh '''
-                    mkdir -p /home/ubuntu/mern-app
-                    cp docker-compose.yml /home/ubuntu/mern-app/docker-compose.yml
+                    mkdir -p /tmp/mern-app
+                    cp docker-compose.yml /tmp/mern-app/docker-compose.yml
+                    cp /home/ubuntu/mern-app/.env /tmp/mern-app/.env
                 '''
             }
         }
@@ -93,7 +94,7 @@ pipeline {
                 echo '🚀 Deploying app on EC2...'
                 sh '''
                     export PATH=/usr/local/bin:/usr/bin:/bin:$PATH
-                    cd /home/ubuntu/mern-app
+                    cd /tmp/mern-app
 
                     # Pull latest images from Docker Hub
                     docker pull bitukumar/notes-frontend:latest
