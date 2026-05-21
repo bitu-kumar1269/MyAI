@@ -2,8 +2,7 @@ version: "3.8"
 
 services:
   backend:
-    image: ${DOCKER_USERNAME:-bitukumar}/notes-backend:latest
-    build: ./backend
+    image: bitukumar/notes-backend:latest
     container_name: notes-backend
     ports:
       - "5001:5001"
@@ -19,12 +18,7 @@ services:
     restart: always
 
   frontend:
-    image: ${DOCKER_USERNAME:-bitukumar}/notes-frontend:latest
-    build:
-      context: ./frontend
-      args:
-        - VITE_BASE_URL=${VITE_BASE_URL}
-        - VITE_CLERK_PUBLISHABLE_KEY=${VITE_CLERK_PUBLISHABLE_KEY}
+    image: bitukumar/notes-frontend:latest
     container_name: notes-frontend
     ports:
       - "3000:3000"

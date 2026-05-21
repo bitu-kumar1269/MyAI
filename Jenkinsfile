@@ -3,11 +3,7 @@ pipeline {
 
     environment {
         DOCKER_USERNAME = 'bitukumar'
-        EC2_HOST        = '54.227.9.167'
-        EC2_USER        = 'ubuntu'
-        FRONTEND_IMAGE  = "bitukumar/notes-frontend:latest"
-        BACKEND_IMAGE   = "bitukumar/notes-backend:latest"
-        PATH            = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:${env.PATH}"
+        PATH            = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${env.PATH}"
     }
 
     stages {
@@ -19,61 +15,45 @@ pipeline {
             }
         }
 
-        stage('Build Images') {
+        stage('Copy docker-compose') {
             steps {
-                echo '🐳 Building Docker images...'
+                echo '📋 Copying docker-compose.yml...'
                 sh '''
-                    export PATH=/usr/local/bin:/opt/homebrew/bin:$PATH
-                    docker build -t bitukumar/notes-frontend:latest ./frontend
-                    docker build -t bitukumar/notes-backend:latest ./backend
+                    mkdir -p ~/mern-app
+                    cp docker-compose.yml ~/mern-app/docker-compose.yml
                 '''
             }
         }
 
-        stage('Push to Docker Hub') {
+        stage('Deploy') {
             steps {
-                echo '⬆️ Pushing images to Docker Hub...'
-                withCredentials([usernamePassword(
-                    credentialsId: 'docker-hub-credentials',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    sh '''
-                        export PATH=/usr/local/bin:/opt/homebrew/bin:$PATH
-                        echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-                        docker push bitukumar/notes-frontend:latest
-                        docker push bitukumar/notes-backend:latest
-                    '''
-                }
-            }
-        }
+                echo '🚀 Deploying app on EC2...'
+                sh '''
+                    export PATH=/usr/local/bin:/usr/bin:/bin:$PATH
+                    cd ~/mern-app
 
-        stage('Deploy to EC2') {
-            steps {
-                echo '🚀 Deploying to AWS EC2...'
-                sshagent(['ec2-ssh-key']) {
-                    sh """
-                        export PATH=/usr/local/bin:/opt/homebrew/bin:$PATH
-                        scp -o StrictHostKeyChecking=no docker-compose.yml ${EC2_USER}@${EC2_HOST}:~/mern-app/docker-compose.yml
-                        ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} '
-                            cd ~/mern-app
-                            docker-compose pull
-                            docker-compose up -d --remove-orphans
-                            docker image prune -f
-                            echo "✅ Deployed successfully!"
-                        '
-                    """
-                }
+                    # Pull latest images from Docker Hub
+                    docker pull bitukumar/notes-frontend:latest
+                    docker pull bitukumar/notes-backend:latest
+
+                    # Restart containers
+                    docker-compose up -d --remove-orphans
+
+                    # Clean up
+                    docker image prune -f
+
+                    echo "✅ Deployed successfully!"
+                '''
             }
         }
     }
 
     post {
         success {
-            echo '✅ Pipeline completed successfully!'
+            echo '✅ CD Pipeline completed successfully!'
         }
         failure {
-            echo '❌ Pipeline failed!'
+            echo '❌ CD Pipeline failed!'
         }
     }
 }
