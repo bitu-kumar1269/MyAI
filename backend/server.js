@@ -7,7 +7,27 @@ import userRouter from "./routes/userRoutes.js";
 
 const app = express();
 
-app.use(cors());
+const allowedOrigins = [
+  "https://quickai-frontend.onrender.com",   // ← Render frontend
+  "http://localhost:5173",                    // ← Vite local dev
+  "http://localhost:3000",                    // ← Local dev
+  process.env.FRONTEND_URL,                  // ← Dynamic from env
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, Postman, curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS blocked: ${origin}`));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+}));
+
 app.use(express.json());
 app.use(clerkMiddleware());
 
