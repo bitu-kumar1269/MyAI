@@ -214,7 +214,7 @@ export const removeImageObject = async (req, res) => {
     res.json({ success: false, message: error.message });
   }
 };
-
+// add file to github
 export const resumeReview = async (req, res) => {
   try {
     const pdf = (await import("pdf-parse")).default;

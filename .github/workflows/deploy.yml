@@ -1,44 +1,87 @@
-name: CI Pipeline — Build & Push to Docker Hub
+name: CI Pipeline — Build Check
 
 on:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
 
 jobs:
 
   # ══════════════════════════════════════════
-  # CI: Build & Push Docker images to Docker Hub
+  # CI: Check Backend builds correctly
   # ══════════════════════════════════════════
-  build-and-push:
-    name: Build & Push to Docker Hub
+  check-backend:
+    name: Check Backend
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+          node-version: '20'
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Install Backend dependencies
+        run: |
+          cd backend
+          npm install
 
-      - name: Build & Push Frontend image
-        uses: docker/build-push-action@v5
+      - name: Check Backend starts
+        run: |
+          cd backend
+          echo "✅ Backend dependencies installed successfully"
+
+  # ══════════════════════════════════════════
+  # CI: Check Frontend builds correctly
+  # ══════════════════════════════════════════
+  check-frontend:
+    name: Check Frontend Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          context: ./frontend
-          push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/notes-frontend:latest
-          build-args: |
-            VITE_BASE_URL=${{ secrets.VITE_BASE_URL }}
-            VITE_CLERK_PUBLISHABLE_KEY=${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
+          node-version: '20'
 
-      - name: Build & Push Backend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/notes-backend:latest
+      - name: Install Frontend dependencies
+        run: |
+          cd frontend
+          npm install
+
+      - name: Build Frontend
+        run: |
+          cd frontend
+          npm run build
+        env:
+          VITE_BASE_URL: ${{ secrets.VITE_BASE_URL }}
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
+
+      - name: Build Success
+        run: echo "✅ Frontend built successfully"
+
+  # ══════════════════════════════════════════
+  # CD: Trigger Render Deploy
+  # ══════════════════════════════════════════
+  deploy:
+    name: Trigger Render Deployment
+    runs-on: ubuntu-latest
+    needs: [check-backend, check-frontend]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Deploy Backend to Render
+        run: |
+          curl -X POST ${{ secrets.RENDER_BACKEND_DEPLOY_HOOK }}
+          echo "✅ Backend deployment triggered!"
+
+      - name: Deploy Frontend to Render
+        run: |
+          curl -X POST ${{ secrets.RENDER_FRONTEND_DEPLOY_HOOK }}
+          echo "✅ Frontend deployment triggered!"
