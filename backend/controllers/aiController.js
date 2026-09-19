@@ -29,7 +29,7 @@ const getCloudinary = async () => {
 export const generateArticle = async (req, res) => {
   try {
     const { userId } = req.auth();
-    const { prompt, length } = req.body;
+    const { prompt, topic, length, tone, audience, keywords } = req.body;
     const plan = req.plan;
     const free_usage = req.free_usage;
 
@@ -40,18 +40,39 @@ export const generateArticle = async (req, res) => {
       });
     }
 
+    const topicText = topic || prompt || "Technology and Innovation";
+    const toneText = tone || "Professional & Engaging";
+    const audienceText = audience ? `Target Audience: ${audience}.` : "";
+    const keywordsText = keywords ? `Focus Keywords: ${keywords}.` : "";
+
+    const systemPrompt = `Write a comprehensive, well-structured, high-quality article about "${topicText}".
+Tone: ${toneText}.
+${audienceText}
+${keywordsText}
+
+Format with clean Markdown:
+- An engaging H1 Title
+- A compelling introduction that hooks the reader
+- Organized body sections with informative H2 & H3 subheadings
+- Bullet points and bold text where appropriate for high readability
+- Actionable takeaways, tips, or real-world examples
+- A strong, thoughtful conclusion`;
+
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: prompt,
+      contents: systemPrompt,
       config: {
         temperature: 0.7,
-        maxOutputTokens: length,
-      }
+        maxOutputTokens: length ? Math.min(Math.max(Number(length), 800), 4000) : 2000,
+      },
     });
 
-    const content = response.text;
+    const content =
+      response.text ||
+      response.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "";
 
-    await sql` INSERT INTO creations (user_id, prompt, content, type) VALUES (${userId}, ${prompt}, ${content}, 'article') `;
+    await sql` INSERT INTO creations (user_id, prompt, content, type) VALUES (${userId}, ${topicText}, ${content}, 'article') `;
 
     if (plan !== "premium") {
       await clerkClient.users.updateUserMetadata(userId, {
@@ -63,7 +84,7 @@ export const generateArticle = async (req, res) => {
 
     res.json({ success: true, content });
   } catch (error) {
-    console.log(error.message);
+    console.error("Generate article error:", error.message);
     res.json({ success: false, message: error.message });
   }
 };
@@ -71,7 +92,7 @@ export const generateArticle = async (req, res) => {
 export const generateBlogTitle = async (req, res) => {
   try {
     const { userId } = req.auth();
-    const { prompt } = req.body;
+    const { prompt, keyword, category, tone } = req.body;
     const plan = req.plan;
     const free_usage = req.free_usage;
 
@@ -82,18 +103,52 @@ export const generateBlogTitle = async (req, res) => {
       });
     }
 
+    const topicKeyword = keyword || prompt || "AI Innovation";
+    const cat = category || "General";
+    const toneVal = tone || "High CTR & Engaging";
+
+    const systemPrompt = `You are an elite viral content strategist and copywriter.
+Generate 10 magnetic, high-converting blog titles for the topic/keyword "${topicKeyword}" in the "${cat}" category.
+Tone: ${toneVal}.
+
+Respond ONLY with a valid JSON object matching this schema:
+{
+  "titles": [
+    {
+      "title": string,
+      "type": "Listicle" | "How-To" | "Curiosity" | "Guide" | "Thought Leadership",
+      "score": number (integer between 75 and 99 representing CTR potential),
+      "characterCount": number,
+      "whyItWorks": string (1 punchy sentence explaining why this title drives clicks)
+    }
+  ]
+}`;
+
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: prompt,
+      contents: systemPrompt,
       config: {
+        responseMimeType: "application/json",
         temperature: 0.7,
-        maxOutputTokens: 100,
-      }
+      },
     });
 
-    const content = response.text;
+    const rawContent =
+      response.text ||
+      response.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "{}";
 
-    await sql` INSERT INTO creations (user_id, prompt, content, type) VALUES (${userId}, ${prompt}, ${content}, 'blog-title') `;
+    let parsedData = null;
+    try {
+      parsedData = JSON.parse(rawContent);
+    } catch {
+      const cleaned = rawContent.replace(/```json/g, "").replace(/```/g, "").trim();
+      parsedData = JSON.parse(cleaned);
+    }
+
+    const content = JSON.stringify(parsedData);
+
+    await sql` INSERT INTO creations (user_id, prompt, content, type) VALUES (${userId}, ${topicKeyword}, ${content}, 'blog-title') `;
 
     if (plan !== "premium") {
       await clerkClient.users.updateUserMetadata(userId, {
@@ -103,9 +158,9 @@ export const generateBlogTitle = async (req, res) => {
       });
     }
 
-    res.json({ success: true, content });
+    res.json({ success: true, content, data: parsedData });
   } catch (error) {
-    console.log(error.message);
+    console.error("Generate blog title error:", error.message);
     res.json({ success: false, message: error.message });
   }
 };
@@ -214,12 +269,10 @@ export const removeImageObject = async (req, res) => {
     res.json({ success: false, message: error.message });
   }
 };
-// add file to github
 export const resumeReview = async (req, res) => {
+  const resume = req.file;
   try {
-    const pdf = (await import("pdf-parse")).default;
     const { userId } = req.auth();
-    const resume = req.file;
     const plan = req.plan;
 
     // Check premium plan
@@ -249,35 +302,221 @@ export const resumeReview = async (req, res) => {
     // Read PDF file
     const dataBuffer = fs.readFileSync(resume.path);
 
-    // Extract text from PDF
-    const pdfData = await pdf(dataBuffer);
+    // Extract text from PDF (handles both pdf-parse v2 and v1)
+    let extractedText = "";
+    const pdfModule = await import("pdf-parse");
 
-    // Delete file after reading (important)
-    fs.unlinkSync(resume.path);
+    if (pdfModule.PDFParse) {
+      const parser = new pdfModule.PDFParse({ data: dataBuffer });
+      const pdfData = await parser.getText();
+      extractedText = pdfData?.text || "";
+      await parser.destroy();
+    } else if (typeof pdfModule.default === "function") {
+      const pdfData = await pdfModule.default(dataBuffer);
+      extractedText = pdfData?.text || "";
+    } else if (typeof pdfModule === "function") {
+      const pdfData = await pdfModule(dataBuffer);
+      extractedText = pdfData?.text || "";
+    } else {
+      throw new Error("Unable to load PDF parser module");
+    }
 
-    // AI prompt
-    const prompt = `Review the following resume and provide feedback.
+    if (!extractedText || !extractedText.trim()) {
+      return res.json({
+        success: false,
+        message: "Could not extract readable text from the uploaded PDF. Please ensure the PDF is not scanned or empty.",
+      });
+    }
+
+    // AI prompt for comprehensive ATS scoring and feedback
+    const prompt = `You are an elite Applicant Tracking System (ATS) auditor and executive resume reviewer.
+Analyze the following resume thoroughly and provide an in-depth, realistic ATS audit and scoring report.
 
 Resume Content:
-${pdfData.text}
+${extractedText}
 
-Provide:
-1. Strengths
-2. Weaknesses
-3. Suggested improvements
-`;
+Respond ONLY with a valid JSON object strictly matching this schema:
+{
+  "overallScore": number (integer between 0 and 100 representing overall ATS readiness),
+  "atsParseRate": number (integer between 0 and 100, e.g. 86),
+  "atsMissedRate": number (100 minus atsParseRate, e.g. 14),
+  "summary": string (2-3 concise sentences summarizing resume readiness and primary opportunity for improvement),
+  "categories": [
+    {
+      "id": "content",
+      "name": "CONTENT",
+      "score": number (integer 0-100),
+      "issueCount": number (count of items with status !== 'pass'),
+      "items": [
+        {
+          "id": "ats-parse-rate",
+          "name": "ATS Parse Rate",
+          "status": "pass" | "issue" | "warning",
+          "score": number (0-100),
+          "readRate": number (percentage read, e.g. 86),
+          "missedRate": number (percentage missed, e.g. 14),
+          "description": "Employers and recruiters use an Applicant Tracking System (ATS) to scan job applications at scale. A high parse rate means the ATS reads your experience and skills clearly, so more recruiters see your resume.",
+          "callout": string (e.g. "The missing 14% of your resume isn't your experience — it's your template."),
+          "findings": string (specific findings based on the uploaded resume text),
+          "recommendation": string (concrete fix for the candidate)
+        },
+        {
+          "id": "quantifying-impact",
+          "name": "Quantifying Impact",
+          "status": "pass" | "issue" | "warning",
+          "score": number (0-100),
+          "description": "Recruiters look for numbers (%, $, metrics) that prove your accomplishments and measurable business results.",
+          "findings": string,
+          "recommendation": string
+        },
+        {
+          "id": "repetition",
+          "name": "Repetition",
+          "status": "pass" | "issue" | "warning",
+          "score": number (0-100),
+          "description": "Using varied action verbs and eliminating filler words keeps hiring managers engaged.",
+          "findings": string,
+          "recommendation": string
+        },
+        {
+          "id": "spelling-grammar",
+          "name": "Spelling & Grammar",
+          "status": "pass" | "issue" | "warning",
+          "score": number (0-100),
+          "description": "Flawless grammar and spelling reflect high attention to detail and professionalism.",
+          "findings": string,
+          "recommendation": string
+        },
+        {
+          "id": "bullets-consistency",
+          "name": "Bullets Consistency",
+          "status": "pass" | "issue" | "warning",
+          "score": number (0-100),
+          "description": "Consistent bullet structure (action verb + task + outcome) and concise length make reading effortless.",
+          "findings": string,
+          "recommendation": string
+        }
+      ]
+    },
+    {
+      "id": "sections",
+      "name": "SECTIONS",
+      "score": number (integer 0-100),
+      "issueCount": number,
+      "items": [
+        {
+          "id": "contact-info",
+          "name": "Contact Information",
+          "status": "pass" | "issue" | "warning",
+          "score": number (0-100),
+          "description": "Must include full name, phone number, professional email, location (city/state), and LinkedIn profile link.",
+          "findings": string,
+          "recommendation": string
+        },
+        {
+          "id": "summary-objective",
+          "name": "Professional Summary",
+          "status": "pass" | "issue" | "warning",
+          "score": number (0-100),
+          "description": "A compelling 2-3 sentence elevator pitch summarizing your career expertise and value.",
+          "findings": string,
+          "recommendation": string
+        },
+        {
+          "id": "work-experience",
+          "name": "Work Experience",
+          "status": "pass" | "issue" | "warning",
+          "score": number (0-100),
+          "description": "Clear reverse-chronological structure with job titles, company names, dates, and bulleted duties.",
+          "findings": string,
+          "recommendation": string
+        },
+        {
+          "id": "education-certs",
+          "name": "Education & Certifications",
+          "status": "pass" | "issue" | "warning",
+          "score": number (0-100),
+          "description": "Degree, major, institution, graduation year, plus relevant credentials.",
+          "findings": string,
+          "recommendation": string
+        },
+        {
+          "id": "skills-section",
+          "name": "Skills Alignment",
+          "status": "pass" | "issue" | "warning",
+          "score": number (0-100),
+          "description": "Grouped hard and soft skills that match target job requirements.",
+          "findings": string,
+          "recommendation": string
+        }
+      ]
+    },
+    {
+      "id": "ats-essentials",
+      "name": "ATS ESSENTIALS",
+      "score": number (integer 0-100),
+      "issueCount": number,
+      "items": [
+        {
+          "id": "file-structure",
+          "name": "Layout & Flow",
+          "status": "pass" | "issue" | "warning",
+          "score": number (0-100),
+          "description": "Clean single-column structure without complex tables, columns, or graphics that break ATS parsing.",
+          "findings": string,
+          "recommendation": string
+        },
+        {
+          "id": "standard-headings",
+          "name": "Standard Headings",
+          "status": "pass" | "issue" | "warning",
+          "score": number (0-100),
+          "description": "Uses standard headers (e.g., 'Work Experience', 'Education', 'Skills') recognized by ATS bots.",
+          "findings": string,
+          "recommendation": string
+        },
+        {
+          "id": "date-formatting",
+          "name": "Date Formatting",
+          "status": "pass" | "issue" | "warning",
+          "score": number (0-100),
+          "description": "Standardized date formats (e.g., MM/YYYY or Month Year) for proper tenure parsing.",
+          "findings": string,
+          "recommendation": string
+        }
+      ]
+    }
+  ],
+  "strengths": [string, string, string],
+  "weaknesses": [string, string],
+  "topFixes": [string, string, string]
+}`;
 
-    // Call AI
+    // Call AI with JSON output mode
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
       config: {
-        temperature: 0.7,
-        maxOutputTokens: 1000,
-      }
+        responseMimeType: "application/json",
+        temperature: 0.2,
+      },
     });
 
-    const content = response.text;
+    const rawContent =
+      response.text ||
+      response.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "{}";
+
+    let parsedData;
+    try {
+      parsedData = JSON.parse(rawContent);
+    } catch {
+      // Fallback in case response had surrounding markdown code fences
+      const cleaned = rawContent.replace(/```json/g, "").replace(/```/g, "").trim();
+      parsedData = JSON.parse(cleaned);
+    }
+
+    const content = JSON.stringify(parsedData);
 
     // Save result in database
     await sql`
@@ -288,13 +527,23 @@ Provide:
     res.json({
       success: true,
       content,
+      data: parsedData,
     });
-
   } catch (error) {
-    console.log(error.message);
+    console.error("Resume review error:", error.message);
     res.json({
       success: false,
       message: error.message,
     });
+  } finally {
+    // Delete file after reading
+    if (resume?.path && fs.existsSync(resume.path)) {
+      try {
+        fs.unlinkSync(resume.path);
+      } catch (cleanupError) {
+        console.error("Failed to delete temp file:", cleanupError.message);
+      }
+    }
   }
 };
+
